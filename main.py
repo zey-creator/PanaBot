@@ -31,15 +31,43 @@ async def _update_values(user, newvalue = 0, lugar = "cartera", set = False):
 
   # Ahora solamente podemos modificar / añadir u otro. 
   if set == False: 
-    valores[lugar][lugar] += newvalue
+    valores[lugar] += newvalue
+    await _update_net_worth() # Corremos la funcion y asi mantenemos el valor al corriente
   else: 
     valores[lugar] = newvalue
+    await _update_net_worth()
 
 async def _get_balance(user): 
   with open('./DataBase/economia.json', 'r') as documento: 
     panas = json.load(documento)
 
     return panas[str(user.id)]
+
+async def _update_net_worth(user): 
+  valores = await _get_balance(user) 
+
+  valores["total"] = ( valores["cartera"] + valores["banco"] )
+
+  # Si necesitamos lo que vendria siendo obtener el total entonces 
+  # simplemente lo mandamos para atras
+  return valores["total"]
+
+async def _choose_random_tip(): 
+  with open('./Otros/tips_random.json', 'r') as tips: 
+    numero_random = random.randrange(1, 6)
+    tip_aliatoreo = json.load(tips)[str(numero_random)]
+
+    # Entonces regresamos el tip alateorio y este puede ser utilizado en nuestros embeds.
+    return tip_aliatoreo
+
+async def _create_embed_message(color, title, desc = None): 
+  tip = await _choose_random_tip()
+
+  embed_message = discord.Embed( color = color )
+  embed_message.add_field( name = title, value = desc )
+  embed_message.set_footer( text = tip )
+
+  return embed_message
 
 # Eventos del bot, como otros Game Engine u otros frameworks, etc
 # hay eventos, que si se cumplen ciertos requisitos estos se "lanzan"
@@ -51,7 +79,10 @@ async def on_ready():
 
 @client.command( aliases = [ 'crearcuenta' ] )
 async def _creacion_de_la_cuenta(ctx): 
-  # Basicamente lo que estamos haciendo aqui es abrir el documento jason y declarar una variable
+  # Basico, verificamos que no sea un bot el que manda el mensaje
+  if ( ctx.author.bot ): return
+
+  # Basicamente lo que estamos haciendo aqui es abrir el documento json y declarar una variable
   # que lo "sostenga", yo use "documento" para una utilizacion mas facil. 
   with open("./DataBase/economia.json", 'r') as documento: 
     # Despues vamos a cargar el documento, esto nos devolvera la coleccin de lo q se almacena ahi
@@ -59,8 +90,16 @@ async def _creacion_de_la_cuenta(ctx):
 
     # Ahora verificaremos que el pana no este en la base d datos, de lo contrario no haremos
     # nada especial
-    if ( str(ctx.author.id) in panas ): 
-      return False 
+    if ( str(ctx.author.id) in panas ):
+      mensaje_embed = await _create_embed_message(
+        0xff0000, 
+        "Pana, que esta haciendo? ", 
+        "Ahorita no hay sistema joven, me marca error y que usted esta bien guapo/a. De todas maneras, ya tienes una cuenta no necesitas dos, a menos de que quieras lavar dinero, ahi si, pero bueno- Trabaja!"
+      )
+      await ctx.channel.send( embed = mensaje_embed )
+      
+      # Terminamos la funcion aqui 
+      return 
     else: 
       # Creamos una variable para el usiario / autor del mensaje
       user = ctx.author
@@ -72,11 +111,44 @@ async def _creacion_de_la_cuenta(ctx):
       # Despues insertamos lo que vendria siendo el valor "cartera" y el valor "banco" 
       panas[str(user.id)]["cartera"] = 0
       panas[str(user.id)]["banco"] = 0
+      panas[str(user.id)]["total"] = 0
 
   # Y ahora añadimos eso a nuestro documento json asi podemos crear una base d datos
   # que basicamente se "guarda" 
   with open("./DataBase/economia.json", 'w') as documento: 
     json.dump(panas, documento)
+
+@client.command( aliases = ['checarcuenta', 'b'] )
+async def _check_balance(ctx):
+  if ( ctx.author.bot ): return
+
+  with open("./DataBase/economia.json", 'r') as documento: 
+    panas = json.load(documento)
+
+    balance = await _get_balance(ctx.author)
+    Cartera = balance["cartera"]
+    Banco = balance["banco"]
+    Total = await _update_net_worth(ctx.author)
+
+    if ( str(ctx.author.id) in panas ): 
+      mensaje_embed = await _create_embed_message(
+        0x14d270,
+        "Esto es lo que tienes en tu cuenta pana...",
+        "Si quieres conseguir mas t recomendaria empezar a trabajar! Hay muchas cosas que puedes hacer."
+      )
+      mensaje_embed.add_field(name = "Tu moni:", value = str(f":money_with_wings: { Cartera }"), inline = False)
+      mensaje_embed.add_field(name = "En el banco:", value = str(f":money_with_wings: { Banco }"), inline = False)
+      mensaje_embed.add_field(name = "Total:", value = str(f":money_with_wings: { Total }"), inline = False)
+
+      await ctx.channel.send( embed = mensaje_embed )
+    else: 
+      mensaje_embed = await _create_embed_message(
+        0xff0000,
+        "OOPSIE, parece que no tienes cuenta pana!", 
+        "Deberias de pensar en abrir una... Oh espera, ya lo estoy haciendo por ti descuida, despues de este mensaje puede empezar a usar tu nueva cuenta bancaria!",
+      )
+
+      await ctx.channel.send( embed = mensaje_embed )
 
 # Usamos el constructor "run" que basicamente mandara una señal a Discord para q empiece a correr
 # nuestra aplicacion con el token especifico.
