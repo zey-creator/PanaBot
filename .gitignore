@@ -1,2 +1,2 @@
 .env
-economia.json
+./commands/economycommands/DataBase/economia.json
